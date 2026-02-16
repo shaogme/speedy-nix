@@ -116,13 +116,14 @@ jobs:
           # Example: https://releases.nixos.org/nix/nix-2.24.0/nix-2.24.0-x86_64-linux.tar.xz
           URL="https://releases.nixos.org/nix/nix-${VERSION}/nix-${VERSION}-${SYSTEM}.tar.xz"
           
-          echo "Downloading $URL..."
-          curl -L -o nix-original.tar.xz "$URL"
+          echo "Streaming download ($URL) and Repackaging to .tar.zst..."
           
-          echo "Repackaging to .tar.zst..."
-          # Decompress xz and recompress with zstd -19 (max compression for release) or -10 for speed
-          # Using -10 as a balance
-          xz -d -c nix-original.tar.xz | zstd -T0 -10 -o "nix-${SYSTEM}.tar.zst"
+          # Stream pipeline:
+          # 1. curl download (follow redirects, fail on error)
+          # 2. xz decompress
+          # 3. zstd recompress with high ratio (-19) and long window (--long)
+          # This significantly reduces artifact size for faster end-user downloads
+          curl -fL "$URL" | xz -d | zstd -T0 -19 --long -o "nix-${SYSTEM}.tar.zst"
           
           ls -lh *.tar.zst
 
