@@ -17,6 +17,10 @@ inputs:
     description: 'Perform a multi-user installation (Linux only, macOS is always multi-user)'
     required: false
     default: 'false'
+  extra_nix_config:
+    description: 'Extra configuration to append to nix.conf'
+    required: false
+    default: ''
 
 runs:
   using: "composite"
@@ -27,6 +31,7 @@ runs:
         INPUT_REPO: ${{ inputs.repository }}
         INPUT_CHANNEL: ${{ inputs.channel }}
         INPUT_MULTI_USER: ${{ inputs.multi_user }}
+        INPUT_EXTRA_NIX_CONFIG: ${{ inputs.extra_nix_config }}
 
       run: |
         set -e
@@ -119,6 +124,19 @@ runs:
             for p in "${PATHS[@]}"; do
                 echo "$p" >> $GITHUB_PATH
             done
+            
+            # Apply extra_nix_config
+            if [ -n "$INPUT_EXTRA_NIX_CONFIG" ]; then
+                 echo "Applying extra_nix_config..."
+                 if [[ "$RUNNER_OS" == "Linux" && "$INPUT_MULTI_USER" != "true" ]]; then
+                     # Single user linux
+                     mkdir -p ~/.config/nix
+                     echo "$INPUT_EXTRA_NIX_CONFIG" >> ~/.config/nix/nix.conf
+                 else
+                     # Multi-user (Linux or macOS)
+                     echo "$INPUT_EXTRA_NIX_CONFIG" | sudo tee -a /etc/nix/nix.conf > /dev/null
+                 fi
+            fi
             
             # Add channel if specified
             if [ -n "$INPUT_CHANNEL" ]; then

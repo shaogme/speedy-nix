@@ -51,6 +51,13 @@ jobs:
             channel: 'https://nixos.org/channels/nixpkgs-unstable nixpkgs'
             name: macOS Intel Channel
 
+          # Linux: Extra Config
+          - os: ubuntu-latest
+            multi_user: 'false'
+            channel: 'https://nixos.org/channels/nixpkgs-unstable nixpkgs'
+            extra_nix_config: 'experimental-features = nix-command flakes'
+            name: Linux Extra Config
+
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.name }}
 
@@ -64,6 +71,7 @@ jobs:
           repository: shaogme/speedy-nix
           channel: ${{ matrix.channel }}
           multi_user: ${{ matrix.multi_user }}
+          extra_nix_config: ${{ matrix.extra_nix_config }}
 
       - name: Verify Installation
         shell: bash
@@ -93,5 +101,23 @@ jobs:
                  echo "::warning::Single-user path $HOME/.nix-profile/bin not found in PATH"
              else
                  echo "Single-user path confirmed."
+             fi
+          fi
+
+          # Verify extra_nix_config if set
+          if [[ -n "${{ matrix.extra_nix_config }}" ]]; then
+             echo "Verifying extra_nix_config..."
+             if [[ "${{ matrix.multi_user }}" == "true" ]]; then
+                CONFIG_FILE="/etc/nix/nix.conf"
+             else
+                CONFIG_FILE="$HOME/.config/nix/nix.conf"
+             fi
+             
+             if grep -q "experimental-features = nix-command flakes" "$CONFIG_FILE"; then
+                echo "Configuration applied successfully."
+             else
+                echo "::error::Configuration not found in $CONFIG_FILE"
+                cat "$CONFIG_FILE"
+                exit 1
              fi
           fi

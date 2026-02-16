@@ -39,6 +39,22 @@ steps:
   - run: nix-shell -p hello --run hello
 ```
 
+### With Extra Configuration
+
+To configure Nix settings (e.g., adding binary caches or enabling experimental features):
+
+```yaml
+steps:
+  - uses: actions/checkout@v6
+  
+  - name: Install Nix with Extra Config
+    uses: shaogme/speedy-nix@main
+    with:
+      extra_nix_config: |
+        access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+        experimental-features = nix-command flakes
+```
+
 ### Inputs
 
 | Input | Description | Default |
@@ -46,6 +62,7 @@ steps:
 | `repository` | The repository hosting the releases. Change this if you are forking. | `shaogme/speedy-nix` |
 | `channel` | Nix channel to add (e.g. `https://nixos.org/channels/nixpkgs-unstable nixpkgs`). | *None* |
 | `multi_user` | Perform a multi-user installation (Linux only, macOS is always multi-user). | `false` |
+| `extra_nix_config` | Extra configuration to append to `nix.conf`. | *None* |
 
 > **Note**: This action always installs the **latest** stable version of Nix available in the mirror. Pinning specific versions is not supported to ensure users are always on the latest stable release.
 
