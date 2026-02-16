@@ -63,9 +63,9 @@ runs:
         
         # Construct URL for latest release
         FILENAME="nix-${SYSTEM}.tar.zst"
-        URL="https://github.com/${INPUT_REPO}/releases/latest/download/${FILENAME}"
+        URL="https://github.com/${INPUT_REPO}/releases/download/nix-upstream/${FILENAME}"
         
-        echo "Downloading Nix (latest) for ${SYSTEM} from: $URL"
+        echo "Downloading Nix (nix-upstream) for ${SYSTEM} from: $URL"
         
         # Stream download and extract with retry
         set -o pipefail
