@@ -17,9 +17,11 @@ jobs:
         include:
             # Linux
           - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             
           # macOS
           - os: macos-latest
+          - os: macos-15-intel
             
     runs-on: ${{ matrix.os }}
     name: Test Nix (latest) on ${{ matrix.os }}

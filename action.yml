@@ -71,7 +71,7 @@ runs:
         # Run the single-user installer
         # We use --no-daemon to install in single-user mode (suitable for CI runners)
         # We disable channel update to speed things up
-        "$EXTRACTED_ROOT/install" --no-daemon --no-channel-update
+        "$EXTRACTED_ROOT/install" --no-daemon --no-channel-add --yes
         
         # Setup environment
         echo "Setting up environment..."
