@@ -15,16 +15,44 @@ jobs:
       fail-fast: false
       matrix:
         include:
-            # Linux
+          # Linux: Single User (Default), No Channel
           - os: ubuntu-latest
+            multi_user: 'false'
+            channel: ''
+            name: Linux Single-User No-Channel
+
+          # Linux: Single User, With Channel
+          - os: ubuntu-latest
+            multi_user: 'false'
+            channel: 'https://nixos.org/channels/nixpkgs-unstable nixpkgs'
+            name: Linux Single-User Channel
+
+          # Linux: Multi User
+          - os: ubuntu-latest
+            multi_user: 'true'
+            channel: 'https://nixos.org/channels/nixpkgs-unstable nixpkgs'
+            name: Linux Multi-User
+
+          # Linux ARM: Single User
           - os: ubuntu-24.04-arm
-            
-          # macOS
+            multi_user: 'false'
+            channel: 'https://nixos.org/channels/nixpkgs-unstable nixpkgs'
+            name: Linux ARM Single-User
+
+          # macOS: Latest (ARM), No Channel
           - os: macos-latest
+            multi_user: 'false' # Should be ignored/forced to true
+            channel: ''
+            name: macOS ARM No-Channel
+
+          # macOS: Intel, With Channel
           - os: macos-15-intel
-            
+            multi_user: 'true'
+            channel: 'https://nixos.org/channels/nixpkgs-unstable nixpkgs'
+            name: macOS Intel Channel
+
     runs-on: ${{ matrix.os }}
-    name: Test Nix (latest) on ${{ matrix.os }}
+    name: ${{ matrix.name }}
 
     steps:
       - name: Checkout
@@ -33,8 +61,9 @@ jobs:
       - name: Install Nix
         uses: ./
         with:
-          repository: shaogme/speedy-nix # Default
-          channel: 'https://nixos.org/channels/nixpkgs-unstable nixpkgs'
+          repository: shaogme/speedy-nix
+          channel: ${{ matrix.channel }}
+          multi_user: ${{ matrix.multi_user }}
 
       - name: Verify Installation
         shell: bash
@@ -42,6 +71,27 @@ jobs:
           echo "Verifying Nix installation..."
           nix --version
           
-          echo "Testing nix-shell..."
-          nix-shell -p hello --run hello
-
+          if [[ -n "${{ matrix.channel }}" ]]; then
+            echo "Testing nix-shell (Channel provided)..."
+            nix-shell -p hello --run hello
+          else
+            echo "Testing basic evaluation (No channel)..."
+            nix-instantiate --eval -E '1+1'
+          fi
+          
+          # Verify Multi-user/Daemon presence in PATH
+          if [[ "${{ matrix.multi_user }}" == "true" ]] || [[ "$RUNNER_OS" == "macOS" ]]; then
+             echo "Checking for multi-user daemon paths..."
+             if [[ ":$PATH:" != *":/nix/var/nix/profiles/default/bin:"* ]]; then
+                 echo "::warning::Daemon path /nix/var/nix/profiles/default/bin not found in PATH"
+             else
+                 echo "Daemon path confirmed."
+             fi
+          else
+             echo "Checking for single-user paths..."
+             if [[ ":$PATH:" != *":$HOME/.nix-profile/bin:"* ]]; then
+                 echo "::warning::Single-user path $HOME/.nix-profile/bin not found in PATH"
+             else
+                 echo "Single-user path confirmed."
+             fi
+          fi

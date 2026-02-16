@@ -13,6 +13,10 @@ inputs:
     description: 'Nix channel to add (e.g. https://nixos.org/channels/nixpkgs-unstable nixpkgs)'
     required: false
     default: ''
+  multi_user:
+    description: 'Perform a multi-user installation (Linux only, macOS is always multi-user)'
+    required: false
+    default: 'false'
 
 runs:
   using: "composite"
@@ -22,6 +26,7 @@ runs:
       env:
         INPUT_REPO: ${{ inputs.repository }}
         INPUT_CHANNEL: ${{ inputs.channel }}
+        INPUT_MULTI_USER: ${{ inputs.multi_user }}
 
       run: |
         set -e
@@ -75,13 +80,27 @@ runs:
         echo "Installing Nix..."
         
         if [[ "$RUNNER_OS" == "Linux" ]]; then
-          # Linux: Single-user install
-          "$EXTRACTED_ROOT/install" --no-daemon --no-channel-add --yes
-          
-          NIX_PROFILE_SCRIPT="$HOME/.nix-profile/etc/profile.d/nix.sh"
-          NIX_BIN_PATH="$HOME/.nix-profile/bin"
+          if [[ "$INPUT_MULTI_USER" == "true" ]]; then
+             # Linux: Multi-user install
+             echo "Performing multi-user installation on Linux..."
+             if ! sudo "$EXTRACTED_ROOT/install" --daemon --no-channel-add --yes; then
+                echo "::error::Multi-user installation failed."
+                exit 1
+             fi
+             
+             NIX_PROFILE_SCRIPT="/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
+             NIX_BIN_PATH="/nix/var/nix/profiles/default/bin:$HOME/.nix-profile/bin"
+          else
+             # Linux: Single-user install
+             echo "Performing single-user installation on Linux..."
+             "$EXTRACTED_ROOT/install" --no-daemon --no-channel-add --yes
+             
+             NIX_PROFILE_SCRIPT="$HOME/.nix-profile/etc/profile.d/nix.sh"
+             NIX_BIN_PATH="$HOME/.nix-profile/bin"
+          fi
         elif [[ "$RUNNER_OS" == "macOS" ]]; then
           # macOS: Multi-user/Daemon install (required by modern Nix on macOS)
+          echo "Performing multi-user installation on macOS (required)..."
           sudo "$EXTRACTED_ROOT/install" --daemon --no-channel-add --yes
           
           NIX_PROFILE_SCRIPT="/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"

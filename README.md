@@ -45,6 +45,7 @@ steps:
 |-------|-------------|---------|
 | `repository` | The repository hosting the releases. Change this if you are forking. | `shaogme/speedy-nix` |
 | `channel` | Nix channel to add (e.g. `https://nixos.org/channels/nixpkgs-unstable nixpkgs`). | *None* |
+| `multi_user` | Perform a multi-user installation (Linux only, macOS is always multi-user). | `false` |
 
 > **Note**: This action always installs the **latest** stable version of Nix available in the mirror. Pinning specific versions is not supported to ensure users are always on the latest stable release.
 
