@@ -34,6 +34,7 @@ jobs:
         uses: ./
         with:
           repository: shaogme/speedy-nix # Default
+          channel: 'https://nixos.org/channels/nixpkgs-unstable nixpkgs'
 
       - name: Verify Installation
         shell: bash

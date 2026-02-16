@@ -23,11 +23,28 @@ steps:
   - run: nix --version
 ```
 
+### With Channel Configuration
+
+To use `nix-shell` and other commands that require `<nixpkgs>`, you can configure a channel during setup:
+
+```yaml
+steps:
+  - uses: actions/checkout@v6
+  
+  - name: Install Nix with Unstable Channel
+    uses: shaogme/speedy-nix@main
+    with:
+      channel: 'https://nixos.org/channels/nixpkgs-unstable nixpkgs'
+      
+  - run: nix-shell -p hello --run hello
+```
+
 ### Inputs
 
 | Input | Description | Default |
 |-------|-------------|---------|
 | `repository` | The repository hosting the releases. Change this if you are forking. | `shaogme/speedy-nix` |
+| `channel` | Nix channel to add (e.g. `https://nixos.org/channels/nixpkgs-unstable nixpkgs`). | *None* |
 
 > **Note**: This action always installs the **latest** stable version of Nix available in the mirror. Pinning specific versions is not supported to ensure users are always on the latest stable release.
 

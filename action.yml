@@ -9,6 +9,10 @@ inputs:
     description: 'Repository to download artifacts from'
     required: false
     default: 'shaogme/speedy-nix'
+  channel:
+    description: 'Nix channel to add (e.g. https://nixos.org/channels/nixpkgs-unstable nixpkgs)'
+    required: false
+    default: ''
 
 runs:
   using: "composite"
@@ -17,6 +21,7 @@ runs:
       shell: bash
       env:
         INPUT_REPO: ${{ inputs.repository }}
+        INPUT_CHANNEL: ${{ inputs.channel }}
 
       run: |
         set -e
@@ -81,13 +86,13 @@ runs:
             # Export PATH to GITHUB_PATH
             echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
             
-            # Export NIX_PATH and other env vars if needed
-            # For now, just ensuring it's in PATH is key. sourcing nix.sh handles logic.
-            # But GITHUB_ENV must be updated for subsequent steps.
-            
-            # Extract exported variables from nix.sh and add to GITHUB_ENV is tricky.
-            # Easiest way: just rely on updating PATH.
-            
+            # Add channel if specified
+            if [ -n "$INPUT_CHANNEL" ]; then
+                echo "Adding Nix channel: $INPUT_CHANNEL"
+                nix-channel --add $INPUT_CHANNEL
+                nix-channel --update
+            fi
+
             # Verify
             nix --version
         else
