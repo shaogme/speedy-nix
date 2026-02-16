@@ -1,0 +1,96 @@
+name: 'Speedy Nix Setup'
+description: 'Fastest way to install Nix from speedy-nix mirror'
+author: 'shaogme'
+branding:
+  icon: 'zap'
+  color: 'blue'
+inputs:
+  repository:
+    description: 'Repository to download artifacts from'
+    required: false
+    default: 'shaogme/speedy-nix'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Download and Install Nix
+      shell: bash
+      env:
+        INPUT_REPO: ${{ inputs.repository }}
+
+      run: |
+        set -e
+        
+        # Detect OS and Arch
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          OS_KEY="linux"
+        elif [[ "$RUNNER_OS" == "macOS" ]]; then
+          OS_KEY="darwin"
+        else
+          echo "::error::Unsupported OS: $RUNNER_OS"
+          exit 1
+        fi
+        
+        ARCH=$(uname -m)
+        if [[ "$ARCH" == "x86_64" ]]; then
+          ARCH_KEY="x86_64"
+        elif [[ "$ARCH" == "aarch64" ]] || [[ "$ARCH" == "arm64" ]]; then
+          ARCH_KEY="aarch64"
+        else
+          echo "::error::Unsupported Architecture: $ARCH"
+          exit 1
+        fi
+        
+        SYSTEM="${ARCH_KEY}-${OS_KEY}"
+        
+        INSTALL_DIR="${{ runner.temp }}/speedy-nix/latest"
+        mkdir -p "$INSTALL_DIR"
+        
+        # Construct URL for latest release
+        FILENAME="nix-${SYSTEM}.tar.zst"
+        URL="https://github.com/${INPUT_REPO}/releases/latest/download/${FILENAME}"
+        
+        echo "Downloading Nix (latest) for ${SYSTEM} from: $URL"
+        
+        # Stream download and extract
+        curl -fL "$URL" | zstd -d --stdout | tar -x -C "$INSTALL_DIR" || {
+           echo "::error::Failed to download or extract Nix. URL: $URL"
+           exit 1
+        }
+        
+        # Find extraction root
+        EXTRACTED_ROOT=$(find "$INSTALL_DIR" -maxdepth 1 -name "nix-*-${SYSTEM}" -type d | head -n 1)
+        
+        if [[ -z "$EXTRACTED_ROOT" ]]; then
+           echo "::error::Could not find extracted directory in $INSTALL_DIR"
+           ls -la "$INSTALL_DIR"
+           exit 1
+        fi
+        
+        echo "Installing Nix..."
+        # Run the single-user installer
+        # We use --no-daemon to install in single-user mode (suitable for CI runners)
+        # We disable channel update to speed things up
+        "$EXTRACTED_ROOT/install" --no-daemon --no-channel-update
+        
+        # Setup environment
+        echo "Setting up environment..."
+        if [ -e "$HOME/.nix-profile/etc/profile.d/nix.sh" ]; then 
+            . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+            
+            # Export PATH to GITHUB_PATH
+            echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
+            
+            # Export NIX_PATH and other env vars if needed
+            # For now, just ensuring it's in PATH is key. sourcing nix.sh handles logic.
+            # But GITHUB_ENV must be updated for subsequent steps.
+            
+            # Extract exported variables from nix.sh and add to GITHUB_ENV is tricky.
+            # Easiest way: just rely on updating PATH.
+            
+            # Verify
+            nix --version
+        else
+            echo "::error::Nix installed but profile script not found."
+            exit 1
+        fi

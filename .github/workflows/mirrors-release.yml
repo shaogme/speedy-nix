@@ -1,0 +1,158 @@
+name: Mirrors Release
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force_update:
+        description: 'Force update'
+        required: false
+        default: false
+        type: boolean
+  push:
+    paths:
+      - '.github/workflows/mirrors-release.yml'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    outputs:
+      nix_needs_update: ${{ steps.check.outputs.nix_needs_update }}
+      nix_version: ${{ steps.check.outputs.nix_version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch previous state
+        run: |
+          gh release download state-history -p state.json 2>/dev/null || echo "{}" > state.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Run version-check from Docker
+        id: check
+        run: |
+          # Pull the latest version-check image
+          IMAGE_NAME="ghcr.io/${{ github.repository }}/version-check:latest"
+          docker pull $IMAGE_NAME
+          
+          # Run the check
+          docker run --rm -v ${{ github.workspace }}:/work -w /work $IMAGE_NAME \
+            --input state.json \
+            --output state.json \
+            --update-status status.json
+          
+          STATUS=$(cat status.json)
+          echo "Status: $STATUS"
+          
+          UPDATE=$(echo $STATUS | jq -r .nix_needs_update)
+          VERSION=$(echo $STATUS | jq -r .current.nix_version)
+          
+          # Handle manual force options
+          FORCE="${{ inputs.force_update }}"
+          
+          if [[ "$FORCE" == "true" ]]; then
+            echo "Forcing update..."
+            UPDATE="true"
+          fi
+          
+          echo "nix_needs_update=$UPDATE" >> $GITHUB_OUTPUT
+          echo "nix_version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Determine if state history should be updated
+          if [[ "$UPDATE" == "true" ]]; then
+             echo "should_update_state=true" >> $GITHUB_OUTPUT
+          else
+             echo "should_update_state=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update State History
+        if: steps.check.outputs.should_update_state == 'true'
+        run: |
+          gh release create state-history state.json --title "State History" --notes "Auto-updated state history" || gh release upload state-history state.json --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  mirror-nix:
+    needs: check-updates
+    if: needs.check-updates.outputs.nix_needs_update == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - system: x86_64-linux
+            os: ubuntu-latest
+          - system: aarch64-linux
+            os: ubuntu-24.04-arm
+            
+          # macOS
+          - system: x86_64-darwin
+            os: macos-15-intel
+          - system: aarch64-darwin
+            os: macos-latest # Apple Silicon
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download and Repackage Nix
+        shell: bash
+        run: |
+          VERSION="${{ needs.check-updates.outputs.nix_version }}"
+          SYSTEM="${{ matrix.system }}"
+          
+          # Official Nix URL
+          # Example: https://releases.nixos.org/nix/nix-2.24.0/nix-2.24.0-x86_64-linux.tar.xz
+          URL="https://releases.nixos.org/nix/nix-${VERSION}/nix-${VERSION}-${SYSTEM}.tar.xz"
+          
+          echo "Downloading $URL..."
+          curl -L -o nix-original.tar.xz "$URL"
+          
+          echo "Repackaging to .tar.zst..."
+          # Decompress xz and recompress with zstd -19 (max compression for release) or -10 for speed
+          # Using -10 as a balance
+          xz -d -c nix-original.tar.xz | zstd -T0 -10 -o "nix-${SYSTEM}.tar.zst"
+          
+          ls -lh *.tar.zst
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: nix-artifacts-${{ matrix.system }}
+          path: "*.tar.zst"
+          retention-days: 1
+
+  release-nix:
+    needs: [check-updates, mirror-nix]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: nix-artifacts-*
+          merge-multiple: true
+
+      - name: Display Files
+        run: ls -R
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ needs.check-updates.outputs.nix_version }}"
+          name: "Nix v${{ needs.check-updates.outputs.nix_version }}"
+          make_latest: true
+          files: |
+            *.tar.zst

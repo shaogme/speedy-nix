@@ -1,0 +1,44 @@
+name: Test Action
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'action.yml'
+      - '.github/workflows/test-action.yml'
+  workflow_dispatch:
+
+jobs:
+  test-setup:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+            # Linux
+          - os: ubuntu-latest
+            
+          # macOS
+          - os: macos-latest
+            
+    runs-on: ${{ matrix.os }}
+    name: Test Nix (latest) on ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: ./
+        with:
+          repository: shaogme/speedy-nix # Default
+
+      - name: Verify Installation
+        shell: bash
+        run: |
+          echo "Verifying Nix installation..."
+          nix --version
+          
+          echo "Testing nix-shell..."
+          nix-shell -p hello --run hello
+
