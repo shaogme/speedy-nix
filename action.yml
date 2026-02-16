@@ -67,11 +67,22 @@ runs:
         
         echo "Downloading Nix (latest) for ${SYSTEM} from: $URL"
         
-        # Stream download and extract
-        curl -fL "$URL" | zstd -d --stdout | tar -x -C "$INSTALL_DIR" || {
-           echo "::error::Failed to download or extract Nix. URL: $URL"
-           exit 1
-        }
+        # Stream download and extract with retry
+        set -o pipefail
+        for i in {1..2}; do
+           echo "Attempt $i/5: Downloading Nix..."
+           if curl -fL --retry 3 --retry-delay 2 "$URL" | zstd -d --stdout | tar -x -C "$INSTALL_DIR"; then
+               echo "Download successful."
+               break
+           else
+               echo "::warning::Download attempt $i failed. Retrying in 2 seconds..."
+               sleep 2
+               if [ $i -eq 5 ]; then
+                   echo "::error::Failed to download or extract Nix after 5 attempts. URL: $URL"
+                   exit 1
+               fi
+           fi
+        done
         
         # Find extraction root
         EXTRACTED_ROOT=$(find "$INSTALL_DIR" -maxdepth 1 -name "nix-*-${SYSTEM}" -type d | head -n 1)
