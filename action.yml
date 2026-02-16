@@ -73,18 +73,33 @@ runs:
         fi
         
         echo "Installing Nix..."
-        # Run the single-user installer
-        # We use --no-daemon to install in single-user mode (suitable for CI runners)
-        # We disable channel update to speed things up
-        "$EXTRACTED_ROOT/install" --no-daemon --no-channel-add --yes
+        
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          # Linux: Single-user install
+          "$EXTRACTED_ROOT/install" --no-daemon --no-channel-add --yes
+          
+          NIX_PROFILE_SCRIPT="$HOME/.nix-profile/etc/profile.d/nix.sh"
+          NIX_BIN_PATH="$HOME/.nix-profile/bin"
+        elif [[ "$RUNNER_OS" == "macOS" ]]; then
+          # macOS: Multi-user/Daemon install (required by modern Nix on macOS)
+          sudo "$EXTRACTED_ROOT/install" --daemon --no-channel-add --yes
+          
+          NIX_PROFILE_SCRIPT="/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
+          # We add both default (system) and user profile bin to PATH
+          NIX_BIN_PATH="/nix/var/nix/profiles/default/bin:$HOME/.nix-profile/bin"
+        fi
         
         # Setup environment
         echo "Setting up environment..."
-        if [ -e "$HOME/.nix-profile/etc/profile.d/nix.sh" ]; then 
-            . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+        if [ -e "$NIX_PROFILE_SCRIPT" ]; then 
+            . "$NIX_PROFILE_SCRIPT"
             
             # Export PATH to GITHUB_PATH
-            echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
+            # Split paths by : and add each to GITHUB_PATH
+            IFS=':' read -ra PATHS <<< "$NIX_BIN_PATH"
+            for p in "${PATHS[@]}"; do
+                echo "$p" >> $GITHUB_PATH
+            done
             
             # Add channel if specified
             if [ -n "$INPUT_CHANNEL" ]; then
@@ -96,6 +111,6 @@ runs:
             # Verify
             nix --version
         else
-            echo "::error::Nix installed but profile script not found."
+            echo "::error::Nix installed but profile script not found at $NIX_PROFILE_SCRIPT"
             exit 1
         fi
